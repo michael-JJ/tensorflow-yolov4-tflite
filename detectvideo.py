@@ -15,7 +15,8 @@ flags.DEFINE_string('weights', './data/yolov4.weights',
 flags.DEFINE_integer('size', 608, 'resize images to')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
-flags.DEFINE_string('video', './data/road.avi', 'path to input video')
+flags.DEFINE_string('video', './data/road.mp4', 'path to input video')
+flags.DEFINE_string('output', './data/road.avi', 'path to output video')
 
 def main(_argv):
     if FLAGS.tiny:
@@ -67,7 +68,7 @@ def main(_argv):
                 else:
                     model.load_weights(FLAGS.weights).expect_partial()
 
-        model.summary()
+        # model.summary()
     else:
         # Load TFLite model and allocate tensors.
         interpreter = tf.lite.Interpreter(model_path=FLAGS.weights)
@@ -78,13 +79,28 @@ def main(_argv):
         print(input_details)
         print(output_details)
 
+    # setup for output video
+    width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH) + 0.5)
+    height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT) + 0.5)
+    size = (width, height)
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter('/content/output-vid.avi', fourcc, 20.0, size)
+    total_frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
+    print('Total Frames:', total_frames)
+
     while True:
         return_value, frame = vid.read()
+        n_frame = int(vid.get(cv2.CAP_PROP_POS_FRAMES))
+
         if return_value:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image = Image.fromarray(frame)
         else:
-            raise ValueError("No image! Try with another video format")
+            out.release()
+            if(total_frames -1 != n_frame):
+              raise ValueError("No image! Try with another video format")
+            print("Finished processing video.")
+            break
         frame_size = frame.shape[:2]
         image_data = utils.image_preporcess(np.copy(frame), [input_size, input_size])
         image_data = image_data[np.newaxis, ...].astype(np.float32)
@@ -111,9 +127,15 @@ def main(_argv):
         result = np.asarray(image)
         info = "time: %.2f ms" %(1000*exec_time)
         print(info)
-        cv2.namedWindow("result", cv2.WINDOW_AUTOSIZE)
-        result = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        cv2.imshow("result", result)
+
+        # write modified frame to video
+        resultFrame = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        out.write(resultFrame)
+        
+        # save modified frames
+        print("Frame:", n_frame)
+        cv2.imwrite("frame{}.jpg".format(n_frame), resultFrame)
+
         if cv2.waitKey(1) & 0xFF == ord('q'): break
 
 if __name__ == '__main__':
